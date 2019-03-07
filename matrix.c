@@ -5,86 +5,7 @@
  *
  */ 
 
-/*
-#include <avr/io.h>
-//#include <util/delay.h>
 
-int main() 
-{
-	//button
-	DDRC = 0xFF; PORTC = 0x00;
-	DDRB = 0x00; PORTB = 0xFF;
-	
-	while(1)
-	{
-		if((~PINB & 0x01) == 0x01) 
-		{
-			PORTC = 0xFF;
-		}
-		else
-		{
-			PORTC = 0x00;
-		}
-	}
-	
-	return 0;
-}
-*/
-
-#define F_CPU 16000000    // AVR SYS CLOCK FREQUENCY
-#define BAUD 9600         // BAUD RATE
-
-#include <avr/io.h>
-#include <util/delay.h>
-
-//FUNCTION DECLARATIONS:
-
-#define FOSC 1843200 // Clock Speed
-#define BAUD 9600
-#define MYUBRR FOSC/16/BAUD-1
-
-void USART_Init( unsigned int ubrr)
-{
-	//Set baud rate
-	UBRR0H = (unsigned char)(ubrr>>8);
-	UBRR0L = (unsigned char)ubrr;
-	//Enable receiver and transmitter
-	UCSR0B = (1<<RXEN0)|(1<<TXEN0);
-	//Set frame format: 8data, 2stop bit
-	UCSR0C = (1<<USBS0)|(3<<UCSZ00);
-}
-
-void USART_Transmit( unsigned char data )
-{
-	// Wait for empty transmit buffer
-	while ( !( UCSR0A & (1<<UDRE0)) )
-	;
-	// Put data into buffer, sends the data
-	UDR0 = data;
-}
-
-unsigned char USART_Receive( void )
-{
-	/* Wait for data to be received */
-	while ( !(UCSR0A & (1<<RXC0)) )
-	;
-	/* Get and return received data from buffer */
-	return UDR0;
-}
-
-int main( void )
-{
-	//...
-	USART_Init(MYUBRR);
-	USART_Transmit(0x01);
-	USART_Receive();
-	//...
-	return 0;
-}
-
-
-
-/*
 #include <avr/io.h>
 
 //header to enable data flow control over pins
@@ -102,8 +23,11 @@ int main( void )
 
 int main(void)
 {
+	DDRA = 0xFE; PORTA = 0x00; //addthis 
+	
     DDRB = 0xFF; PORTB = 0x00;
 	DDRD = 0xFF; PORTD = 0x00;
+	
 	unsigned char test1[14][8]= {
 		{0b00000000,0b00111100,0b01100110,0b01100110,0b01111110,0b01100110,0b01100110,0b01100110}, //A
 		{0b00000000,0b00111110,0b01100110,0b01100110,0b00111110,0b01100110,0b01100110,0b00111110}, //B
@@ -123,6 +47,8 @@ int main(void)
 	unsigned char rows[] = {1,2,4,8,16,32,64,128};
 	unsigned char letter = 13; //change back to zero
 	unsigned long wait = 1;
+	
+	while(!((PINA & 0x01) == 0x01)) {}
 	
     while (1) 
     {
@@ -160,7 +86,7 @@ int main(void)
 			if(letter < 4) {
 				++letter;
 			}
-			
+			*/
 			if(letter > 0) {
 				--letter;
 			}
@@ -171,10 +97,15 @@ int main(void)
 		{
 			++wait;
 		}
+		if(letter == 0) {
+			break;
+		}
 		
     }
+	PORTB = 0x00;
+	PORTA = 0x02; //do this after matrix is shown 
 }
-*/
+
 /*
 //sending a signal to ~PINA & 0x01 works so micro controller might work
 //timer.h affects led matrix. could be used still just don't use it with the display characters list state.
