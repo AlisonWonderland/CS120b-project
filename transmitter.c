@@ -6,16 +6,19 @@
  */ 
 
 #include <avr/io.h>
+#include <util/delay.h>
+//#include "uart.h"	 //User defined UART library which contains the UART routines
+#include <avr/eeprom.h>
 #include "io.c"
 #include "timer.h"
+
+
 
 unsigned char GetBit( unsigned char x, unsigned char k) {
 	return ((x & (0x01 << k)) != 0);
 }
 
 typedef struct task {
-	/*Tasks should have members that include: state, period,
-	a measurement of elapsed time, and a function pointer.*/
 	signed char state; //Task's current state
 	unsigned long int period; //Task period
 	unsigned long int elapsedTime; //Time elapsed since last task tick
@@ -24,14 +27,14 @@ typedef struct task {
 
 
 unsigned char GetKeypadKey() {
-	PORTC = 0xEF; // Enable col 4 with 0, disable others with 1’s
+	PORTC = 0xEF; // Enable col 4 with 0, disable others with 1â€™s
 	asm ( "nop" ); // add a delay to allow PORTC to stabilize before checking
 	if (GetBit(PINC,0)==0) { return ('1'); }
 	if (GetBit(PINC,1)==0) { return ('4'); }
 	if (GetBit(PINC,2)==0) { return ('7'); }
 	if (GetBit(PINC,3)==0) { return ('*'); }
 	// Check keys in col 2
-	PORTC = 0xDF; // Enable col 5 with 0, disable others with 1’s
+	PORTC = 0xDF; // Enable col 5 with 0, disable others with 1â€™s
 	asm ( "nop" ); // add a delay to allow PORTC to stabilize before checking
 	if (GetBit(PINC,0)==0) { return ('2'); }
 	if (GetBit(PINC,1)==0) { return ('5'); }
@@ -39,7 +42,7 @@ unsigned char GetKeypadKey() {
 	if (GetBit(PINC,3)==0) { return ('0'); }
 	
 	// Check keys in col 3
-	PORTC = 0xBF; // Enable col 6 with 0, disable others with 1’s
+	PORTC = 0xBF; // Enable col 6 with 0, disable others with 1â€™s
 	asm ( "nop" ); // add a delay to allow PORTC to stabilize before checking
 	if (GetBit(PINC,0)==0) { return ('3'); }
 	if (GetBit(PINC,1)==0) { return ('6'); }
@@ -47,7 +50,7 @@ unsigned char GetKeypadKey() {
 	if (GetBit(PINC,3)==0) { return ('#'); }
 	
 	// Check keys in col 4
-	PORTC = 0x7F; // Enable col 6 with 0, disable others with 1’s
+	PORTC = 0x7F; // Enable col 6 with 0, disable others with 1â€™s
 	asm ( "nop" ); // add a delay to allow PORTC to stabilize before checking
 	if (GetBit(PINC,0)==0) { return ('A'); }
 	if (GetBit(PINC,1)==0) { return ('B'); }
@@ -57,38 +60,146 @@ unsigned char GetKeypadKey() {
 	return ('\0'); // default value
 }
 
+unsigned char cursorPositon;
+
+void DisplayInput(unsigned char userInput){
+	switch (userInput) {
+		//case '\0': PORTB = 0x1F; break ; // All 5 LEDs on
+		case '1':
+			LCD_Cursor(cursorPositon + 1);
+			LCD_WriteData('1');
+			break ;
+		case '2':
+			LCD_Cursor(cursorPositon + 1);
+			LCD_WriteData('2');
+			break;
+		case '3':
+			LCD_Cursor(cursorPositon + 1);
+			LCD_WriteData('3');
+			break;
+		case '4':
+			LCD_Cursor(cursorPositon + 1);
+			LCD_WriteData('4');
+			break;
+		case '5':
+			LCD_Cursor(cursorPositon + 1);
+			LCD_WriteData('5');
+			break;
+		case '6':
+			LCD_Cursor(cursorPositon + 1);
+			LCD_WriteData('6');
+			break;
+		case '7':
+			LCD_Cursor(cursorPositon + 1);
+			LCD_WriteData('7');
+			break;
+		case '8':
+			LCD_Cursor(cursorPositon + 1);
+			LCD_WriteData('8');
+			break;
+		case '9':
+			LCD_Cursor(cursorPositon + 1);
+			LCD_WriteData('9');
+			break;
+		case 'A':
+			LCD_Cursor(cursorPositon + 1);
+			LCD_WriteData('A');
+			break;
+		case 'B':
+			LCD_Cursor(cursorPositon + 1);
+			LCD_WriteData('B');
+			break;
+		case 'C':
+			LCD_Cursor(cursorPositon + 1);
+			LCD_WriteData('C');
+			break;
+		case 'D':
+			LCD_Cursor(cursorPositon + 1);
+			LCD_WriteData('D');
+			break;
+		case '*':
+			LCD_Cursor(cursorPositon + 1);
+			LCD_WriteData('*');
+			break;
+		case '0':
+			LCD_Cursor(cursorPositon + 1);
+			LCD_WriteData('0');
+			break;
+		case '#':
+			LCD_Cursor(cursorPositon + 1);
+			LCD_WriteData('#');
+			break;
+		default :
+			break ; // Should never occur. Middle LED
+	}
+	return;
+}
+
+
 void DisplayMenu() {
 	LCD_Cursor(1);
-	LCD_DisplayString(1, "1. Start Game");
-	//add 2. See fastest completion time
+	LCD_DisplayString(1, "1. Start Game   2. Fastest times");
 	return;
 }
 
 void CallReceiver() {
-	//wait for signal back
-	//A3 is output already changed port
-	//A4 is input
-	PORTA = PORTA | 0x04;
-	while(!((~PINA & 0x08) == 0x08)) {
-	}
-	LCD_Cursor(1);
-	LCD_DisplayString(1, "Received");
+	PORTA = PORTA | 0x04; 
+	while(!((PINA & 0x10) == 0x10)) {} 
 	PORTA = PORTA & 0xFB;
+	//PORTA = PORTA & 0xFB; 
+	LCD_ClearScreen();
 	
 	return;
 }
 
 unsigned char waitTick = 0;
-unsigned char timerTick = 0;
+unsigned char timerTick = 0; //use it 
+unsigned char matrixSequence1[] = {'3', 'A', '6', 'B'};
+unsigned char matrixSequence2[] = {'8', '5', '4', '3', 'A', 'B'};
+unsigned char matrixSequence3[] = {'6', '2', '6', '1', '3', '1'};
+unsigned char sequenceSize[] = {4, 6, 6};
+unsigned char userSequence[6];
+unsigned char userInput;
+unsigned char matrixStage; //keeps track of what the display is tracking
+unsigned char sequenceIndex;
+
+unsigned char checkSequence1(){
+	for(unsigned char i = 0; i < sequenceSize[0]; ++i) {
+		if(userSequence[i] != matrixSequence1[i]) {
+			return 0;
+		}
+	}
+	return 1;
+}
+
+unsigned char checkSequence2(){
+	for(unsigned char i = 0; i < sequenceSize[1]; ++i) {
+		if(userSequence[i] != matrixSequence2[i]) {
+			return 0;
+		}
+	}
+	return 1;
+}
+
+unsigned char checkSequence3(){
+	for(unsigned char i = 0; i < sequenceSize[2]; ++i) {
+		if(userSequence[i] != matrixSequence3[i]) {
+			return 0;
+		}
+	}
+	return 1;
+}
 
 enum Game_States {Intro, Wait, Start, ShowScore, KeypadInput, CheckInput} Game_State;
 int Game_Tick(int Game_state){
+	unsigned char read_string = 0;
+	
 	switch (Game_state){
 		case Intro : 
 			DisplayMenu();
 			Game_state = Wait;
 			break;
-		case Wait : //if user holds button for more than .5 seconds then showscore else start game
+		case Wait : 
 			if((~PINB & 0x01) == 0x01) {
 				Game_state = Start;
 			}
@@ -97,7 +208,6 @@ int Game_Tick(int Game_state){
 			}
 			break;
 		case Start : //display matrix
-			//Game_state = UserInput;
 			CallReceiver();
 			Game_state = KeypadInput;
 			break;
@@ -105,8 +215,26 @@ int Game_Tick(int Game_state){
 			Game_state = Wait;
 			break;
 		case KeypadInput : 
-			++timerTick;
-			Game_state = Wait;
+			if(sequenceIndex < sequenceSize[matrixStage]) 
+			{
+				Game_state = KeypadInput;
+			}
+			else 
+			{
+				sequenceIndex = 0;
+				Game_state = CheckInput;
+			}
+			break;
+		case CheckInput :
+			if(matrixStage < 3) 
+			{
+				Game_state = Start;
+			}
+			else
+			{
+				matrixStage = 0;
+				Game_state = Intro; 
+			}
 			break;
 		default: 
 			Game_state = Wait;
@@ -123,11 +251,60 @@ int Game_Tick(int Game_state){
 			LCD_Cursor(1);
 			LCD_DisplayString(1, "Waiting for receiver");
 			break;
-		case ShowScore :
+		case ShowScore : //reading eeprom here
 			LCD_ClearScreen();
 			LCD_Cursor(1);
 			LCD_DisplayString(1, "Showing score");
+			break;
 		case KeypadInput :
+			userInput = GetKeypadKey();
+			
+			if(userInput != '\0'){
+				userSequence[sequenceIndex] = userInput;
+				++sequenceIndex;
+				DisplayInput(userInput);
+			}
+			_delay_ms(2000);
+			
+			break;
+		case CheckInput :
+			if(matrixStage == 0)
+			{
+				if(checkSequence1()) {
+					LCD_Cursor(1);
+					LCD_DisplayString(1, "Correct!");
+				}
+				else {
+					LCD_Cursor(1);
+					LCD_DisplayString(1, "Wrong! the sequence is 3A6B");
+				}
+				++matrixStage;
+			}
+			else if(matrixStage == 1)
+			{
+				if(checkSequence2()) {
+					LCD_Cursor(1);
+					LCD_DisplayString(1, "Correct!");
+				}
+				else {
+					LCD_Cursor(1);
+					LCD_DisplayString(1, "Wrong! the sequence is 8543AB");
+				}
+				++matrixStage;
+			}
+			else if(matrixStage == 2)
+			{
+				if(checkSequence3()) {
+					LCD_Cursor(1);
+					LCD_DisplayString(1, "Correct!");
+				}
+				else {
+					LCD_Cursor(1);
+					LCD_DisplayString(1, "Wrong! the sequence is 626131");
+				}
+				++matrixStage; //after last index
+			}
+			_delay_ms(20000);
 			break;
 		default:
 			break;
@@ -136,17 +313,44 @@ int Game_Tick(int Game_state){
 	return Game_state;
 }
 
+void EEPROM_write(unsigned int uiAddress, unsigned char ucData)
+{
+	/* Wait for completion of previous write */
+	while(EECR & (1<<EEPE))
+	;
+	/* Set up address and Data Registers */
+	EEAR = uiAddress;
+	EEDR = ucData;
+	/* Write logical one to EEMPE */
+	EECR |= (1<<EEMPE);
+	/* Start eeprom write by setting EEPE */
+	EECR |= (1<<EEPE);
+}
+
+unsigned char EEPROM_read(unsigned int uiAddress)
+{
+	/* Wait for completion of previous write */
+	while(EECR & (1<<EEPE))
+	;
+	/* Set up address register */
+	EEAR = uiAddress;
+	/* Start eeprom read by writing EERE */
+	EECR |= (1<<EERE);
+	/* Return data from Data Register */
+	return EEDR;
+}
 
 static task Tasks[1];
 
 int main(void)
 {
-    DDRA = 0x07; PORTA = 0xF8;  //for lcd
+    DDRA = 0x0F; PORTA = 0xF0;  //for lcd
 	DDRB = 0x00; PORTB = 0xFF;
     DDRC = 0xF0; PORTC = 0x0F; // PC7..4 outputs init 0s, PC3..0 inputs init 1s
     DDRD = 0xFF; PORTD = 0x00; //for lcd
     LCD_init();
     
+	
     unsigned long GamePeriod = 100;
     unsigned long period = 100;
     
