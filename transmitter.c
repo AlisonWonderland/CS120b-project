@@ -9,6 +9,7 @@
 #include <util/delay.h>
 //#include "uart.h"	 //User defined UART library which contains the UART routines
 #include <avr/eeprom.h>
+#include "string.h"
 #include "io.c"
 #include "timer.h"
 
@@ -304,7 +305,7 @@ int Game_Tick(int Game_state){
 				}
 				++matrixStage; //after last index
 			}
-			_delay_ms(20000);
+			_delay_ms(50000);
 			break;
 		default:
 			break;
@@ -340,7 +341,7 @@ unsigned char EEPROM_read(unsigned int uiAddress)
 	return EEDR;
 }
 
-static task Tasks[1];
+//static task Tasks[1];
 
 int main(void)
 {
@@ -348,9 +349,24 @@ int main(void)
 	DDRB = 0x00; PORTB = 0xFF;
     DDRC = 0xF0; PORTC = 0x0F; // PC7..4 outputs init 0s, PC3..0 inputs init 1s
     DDRD = 0xFF; PORTD = 0x00; //for lcd
-    LCD_init();
-    
 	
+	unsigned char ByteOfData = 0;
+	char buffer[8];
+	
+    LCD_init();
+	
+	//ByteOfData = 0x16;
+	//eeprom_write_byte (( uint8_t *) 46, ByteOfData );                        // write a byte of data to eeprom
+	//_delay_ms(10);
+
+	ByteOfData = eeprom_read_byte(( uint8_t *) 46);						 // read a byte of data from eeprom
+	itoa(ByteOfData,buffer,10);
+    
+	//LCD_ClearScreen();
+	LCD_Cursor(1);
+	LCD_DisplayString(1, buffer);
+	
+	/*
     unsigned long GamePeriod = 100;
     unsigned long period = 100;
     
@@ -381,6 +397,7 @@ int main(void)
 	    TimerFlag = 0;
 	    
     }
+	*/
 }
 
 /*
