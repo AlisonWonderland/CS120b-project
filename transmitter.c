@@ -7,13 +7,23 @@
 
 #include <avr/io.h>
 #include <util/delay.h>
-//#include "uart.h"	 //User defined UART library which contains the UART routines
 #include <avr/eeprom.h>
 #include "string.h"
 #include "io.c"
 #include "timer.h"
 
-
+int timerTick = 0; //use it
+char seconds[] = " seconds"; //used in the ShowTime case
+unsigned char matrixSequence1[] = {'3', 'A', '6', 'B'};
+unsigned char matrixSequence2[] = {'8', '5', '4', '3', 'A', 'B'};
+unsigned char matrixSequence3[] = {'6', '2', '6', '1', '3', '1'};
+unsigned char sequenceSize[] = {4, 6, 6};
+unsigned char userSequence[6];
+unsigned int recordArray[3];
+unsigned char userInput;
+unsigned char matrixStage; //keeps track of what the display is tracking
+unsigned char sequenceIndex;
+unsigned char correctInput;
 
 unsigned char GetBit( unsigned char x, unsigned char k) {
 	return ((x & (0x01 << k)) != 0);
@@ -61,7 +71,6 @@ unsigned char GetKeypadKey() {
 	return ('\0'); // default value
 }
 
-unsigned char cursorPositon;
 
 void DisplayInput(unsigned char userInput){
 	switch (userInput) {
@@ -144,28 +153,13 @@ void DisplayMenu() {
 }
 
 void CallReceiver() {
-	PORTA = PORTA | 0x04; 
-	while(!((PINA & 0x10) == 0x10)) {} 
-	PORTA = PORTA & 0xFB;
-	//PORTA = PORTA & 0xFB; 
+	PORTA = PORTA | 0x04; //send signal to microcontroller #2 to display sequence on LED matrix
+	while(!((PINA & 0x10) == 0x10)) {} //waiting for microcontroller #2 to send signal back after sequence was displayed
+	PORTA = PORTA & 0xFB; //stop sending signal to microcontroller #2
 	LCD_ClearScreen();
 	
 	return;
 }
-
-unsigned char waitTick = 0;
-int timerTick = 0; //use it
-char timerTickBuffer[8]; //8 for no reason
-char seconds[] = " seconds"; //used in the ShowTime case
-unsigned char trueTime = 0;
-unsigned char matrixSequence1[] = {'3', 'A', '6', 'B'};
-unsigned char matrixSequence2[] = {'8', '5', '4', '3', 'A', 'B'};
-unsigned char matrixSequence3[] = {'6', '2', '6', '1', '3', '1'};
-unsigned char sequenceSize[] = {4, 6, 6};
-unsigned char userSequence[6];
-unsigned char userInput;
-unsigned char matrixStage; //keeps track of what the display is tracking
-unsigned char sequenceIndex;
 
 unsigned char checkSequence1(){
 	for(unsigned char i = 0; i < sequenceSize[0]; ++i) {
@@ -194,12 +188,90 @@ unsigned char checkSequence3(){
 	return 1;
 }
 
-enum Game_States {Intro, Wait, Start, ShowScore, KeypadInput, CheckInput, ShowTime, Record} Game_State;
+void loadRecords() {
+	for(unsigned char i = 0; i < 3; ++i){
+		recordArray[i] = eeprom_read_byte(( uint8_t *) i);
+	}
+	return;
+}
+
+void printSeconds(){
+	for(unsigned char i = 0; i < 7; ++i) {
+		LCD_WriteData(seconds[i]);
+	}
+	return;
+}
+
+void displayScores(){
+	LCD_ClearScreen();
+	LCD_Cursor(1);
+	LCD_DisplayString(1, "1st Stage Record   ");
+	tickToSeconds(recordArray[0]);
+	printSeconds();
+	_delay_ms(35000);
+	LCD_ClearScreen();
+	LCD_Cursor(1);
+	LCD_DisplayString(1, "2nd Stage Record   ");
+	tickToSeconds(recordArray[1]);
+	printSeconds();
+	_delay_ms(35000);
+	LCD_ClearScreen();
+	LCD_Cursor(1);
+	LCD_DisplayString(1, "3rd Stage Record   ");
+	tickToSeconds(recordArray[2]);
+	printSeconds();
+	_delay_ms(35000);
+	return;
+}
+
+void tickToSeconds(int ticks){ 
+	int tempTicks = ticks * 2;
+	
+	unsigned char hundreds = 0;
+	for(unsigned char i = 0; i < 10; ++i){
+		if(tempTicks >= 100) {
+			tempTicks -= 100;
+			++hundreds;
+		}
+	}
+	
+	if(hundreds != 0){ //To make the time look nicer
+		LCD_WriteData(hundreds + '0');
+	}
+	
+	unsigned char tens = 0;
+	for(unsigned char i = 0; i < 10; ++i){
+		if(tempTicks >= 10) {
+			tempTicks -= 10;
+			++tens;
+		}
+	}
+	
+	LCD_WriteData(tens + '0');
+	
+	LCD_WriteData('.');
+	
+	unsigned char ones = 0;
+	for(unsigned char i = 0; i < 10; ++i){
+		if(tempTicks > 0) {
+			tempTicks -= 1;
+			++ones;
+		}
+	}
+	
+	LCD_WriteData(ones + '0');
+	
+	return;
+}
+
+enum Game_States {Intro, Wait, Start, ShowScore, KeypadInput, CheckInput, Record} Game_State;
+	
 int Game_Tick(int Game_state){
-	unsigned char read_string = 0;
 	
 	switch (Game_state){
 		case Intro : 
+			loadRecords();
+			timerTick = 0;
 			DisplayMenu();
 			Game_state = Wait;
 			break;
@@ -216,7 +288,7 @@ int Game_Tick(int Game_state){
 			Game_state = KeypadInput;
 			break;
 		case ShowScore :
-			Game_state = Wait;
+			Game_state = Intro;
 			break;
 		case KeypadInput : 
 			++timerTick; //increment time
@@ -231,21 +303,22 @@ int Game_Tick(int Game_state){
 			}
 			break;
 		case CheckInput :
-			if(matrixStage < 3) 
+			if((matrixStage < 3) && (recordArray[matrixStage - 1] > timerTick) && correctInput)
 			{
-				Game_state = ShowTime;
+				Game_state = Record;
 			}
-			else
+			else if((matrixStage < 3))
+			{
+				Game_state = Start;
+			}
+			else if(matrixStage == 3)
 			{
 				matrixStage = 0;
 				Game_state = Intro; 
 			}
 			break;
-		case ShowTime :
-			Game_state = Start;
-			timerTick = 0;
-			break;
 		case Record :
+			Game_state = Start;
 			break;
 		default: 
 			Game_state = Wait;
@@ -263,9 +336,7 @@ int Game_Tick(int Game_state){
 			LCD_DisplayString(1, "Waiting for receiver");
 			break;
 		case ShowScore : //reading eeprom here
-			LCD_ClearScreen();
-			LCD_Cursor(1);
-			LCD_DisplayString(1, "Showing score");
+			displayScores();
 			break;
 		case KeypadInput :
 			userInput = GetKeypadKey();
@@ -276,60 +347,58 @@ int Game_Tick(int Game_state){
 				DisplayInput(userInput);
 			}
 			_delay_ms(2000);
-			
-			++cursorPositon; //move cursor
 			break;
 		case CheckInput :
-			cursorPositon = 0; //reset cursor
 			if(matrixStage == 0)
 			{
 				if(checkSequence1()) {
 					LCD_Cursor(1);
-					LCD_DisplayString(1, "Completion time(second):");
+					LCD_DisplayString(1, "Completion time(seconds):");
+					LCD_WriteData(' ');
+					tickToSeconds(timerTick);
+					correctInput = 0x01;
 				}
 				else {
 					LCD_Cursor(1);
 					LCD_DisplayString(1, "Wrong! the sequence is 3A6B");
+					correctInput = 0x00;
 				}
-				++matrixStage;
 			}
 			else if(matrixStage == 1)
 			{
 				if(checkSequence2()) {
 					LCD_Cursor(1);
-					LCD_DisplayString(1, "Correct! Completion time(seconds):");
+					LCD_DisplayString(1, "Completion time(seconds):");
+					tickToSeconds(timerTick);
+					correctInput = 0x01;
 				}
 				else {
 					LCD_Cursor(1);
 					LCD_DisplayString(1, "Wrong! the sequence is 8543AB");
+					correctInput = 0x00;
 				}
-				++matrixStage;
 			}
 			else if(matrixStage == 2)
 			{
 				if(checkSequence3()) {
 					LCD_Cursor(1);
-					LCD_DisplayString(1, "Correct! Completion time(seconds):");
+					LCD_DisplayString(1, "Completion time(seconds):");
+					tickToSeconds(timerTick);
+					correctInput = 0x01;
 				}
 				else {
 					LCD_Cursor(1);
 					LCD_DisplayString(1, "Wrong! the sequence is 626131");
+					correctInput = 0x00;
 				}
-				++matrixStage; //after last index
 			}
-			_delay_ms(50000);
-			break;
-		case ShowTime :
-			//add display for time
-			itoa(timerTick,timerTickBuffer,10); //convert timer tick to char to be able to display
-			strcpy(timerTickBuffer, seconds);
-			LCD_Cursor(1);
-			LCD_DisplayString(1, timerTickBuffer);
+			++matrixStage; //after last index
 			_delay_ms(50000);
 			break;
 		case Record :
 			LCD_Cursor(1);
-			LCD_DisplayString(1, "A new record");
+			LCD_DisplayString(1, "A new record!");
+			eeprom_write_byte((uint8_t *) (matrixStage-1), timerTick);
 			_delay_ms(50000);
 			break;
 		default:
@@ -339,43 +408,23 @@ int Game_Tick(int Game_state){
 	return Game_state;
 }
 
-void EEPROM_write(unsigned int uiAddress, unsigned char ucData)
-{
-	/* Wait for completion of previous write */
-	while(EECR & (1<<EEPE))
-	;
-	/* Set up address and Data Registers */
-	EEAR = uiAddress;
-	EEDR = ucData;
-	/* Write logical one to EEMPE */
-	EECR |= (1<<EEMPE);
-	/* Start eeprom write by setting EEPE */
-	EECR |= (1<<EEPE);
-}
-
-unsigned char EEPROM_read(unsigned int uiAddress)
-{
-	/* Wait for completion of previous write */
-	while(EECR & (1<<EEPE))
-	;
-	/* Set up address register */
-	EEAR = uiAddress;
-	/* Start eeprom read by writing EERE */
-	EECR |= (1<<EERE);
-	/* Return data from Data Register */
-	return EEDR;
-}
-
 static task Tasks[1];
 
 int main(void)
 {
     DDRA = 0x0F; PORTA = 0x00;  //for lcd PORTA = f0
-	DDRB = 0x00; PORTB = 0xFF;
-    DDRC = 0xF0; PORTC = 0x0F; // PC7..4 outputs init 0s, PC3..0 inputs init 1s
+	DDRB = 0x00; PORTB = 0xFF; //for buttons
+    DDRC = 0xF0; PORTC = 0x0F; // PC7..4 for outputs, PC3..0 for inputs
     DDRD = 0xFF; PORTD = 0x00; //for lcd
 	
 	LCD_init();
+	
+	/*
+	uncomment to reset values.
+	eeprom_write_byte(( uint8_t *) 0, 99);
+	eeprom_write_byte(( uint8_t *) 1, 99);
+	eeprom_write_byte(( uint8_t *) 2, 99);    
+	*/
 	
     unsigned long GamePeriod = 100;
     unsigned long period = 100;
@@ -407,138 +456,6 @@ int main(void)
 	    TimerFlag = 0;
 	    
     }
+	
 }
-
-/*
-	timerTick = 5;
-	itoa(timerTick,timerTickBuffer,10); //convert timer tick to char to be able to display
-	//strcpy(timerTickBuffer, seconds);
-	LCD_Cursor(1);
-	LCD_DisplayString(1, "seconds");
-	LCD_WriteData(' ');
-	LCD_WriteData(timerTick + '0');
-	LCD_WriteData(' ');
-	LCD_WriteData('S');
-	_delay_ms(50000);
-	*/
-
-/*
-	
-	unsigned char ByteOfData = 0;
-	char buffer[8];
-	
-	
-	ByteOfData = 0x16;
-	eeprom_write_byte (( uint8_t *) 46, ByteOfData );                        // write a byte of data to eeprom
-	_delay_ms(10);
-
-	ByteOfData = eeprom_read_byte(( uint8_t *) 46);						 // read a byte of data from eeprom
-	itoa(ByteOfData,buffer,10);
-    
-	//LCD_ClearScreen();
-	LCD_Cursor(1);
-	LCD_DisplayString(1, buffer);
-	*/
-
-/*
-enum CheckKeypad_States {Wait_KP, GetKey, Display} State;
-unsigned char x;
-
-int KeypadTick(int state){
-	switch (state){
-		case Wait_KP : state = GetKey;
-			break;
-		case GetKey : state = Display;
-			break;
-		case Display : state = GetKey;
-			break;
-		default: State = GetKey;
-			break;
-	}//end transitions
-	
-	switch (state)
-	{
-		case Wait_KP :
-			break;
-		case GetKey : x = GetKeypadKey();
-			break;
-		case Display :
-		
-		switch (x) {
-			//case '\0': PORTB = 0x1F; break ; // All 5 LEDs on
-			case '1':
-				LCD_Cursor(1);
-				LCD_WriteData('1');
-				break ;
-			case '2':
-				LCD_Cursor(1);
-				LCD_WriteData('2');
-				break;
-			case '3':
-			LCD_Cursor(1);
-			LCD_WriteData('3');
-			break;
-			case '4':
-			LCD_Cursor(1);
-			LCD_WriteData('4');
-			break;
-			case '5':
-			LCD_Cursor(1);
-			LCD_WriteData('5');
-			break;
-			case '6':
-			LCD_Cursor(1);
-			LCD_WriteData('6');
-			break;
-			case '7':
-			LCD_Cursor(1);
-			LCD_WriteData('7');
-			break;
-			case '8':
-			LCD_Cursor(1);
-			LCD_WriteData('8');
-			break;
-			case '9':
-			LCD_Cursor(1);
-			LCD_WriteData('9');
-			break;
-			case 'A':
-			LCD_Cursor(1);
-			LCD_WriteData('A');
-			break;
-			case 'B':
-			LCD_Cursor(1);
-			LCD_WriteData('B');
-			break;
-			case 'C':
-			LCD_Cursor(1);
-			LCD_WriteData('C');
-			break;
-			case 'D':
-			LCD_Cursor(1);
-			LCD_WriteData('D');
-			break;
-			case '*':
-			LCD_Cursor(1);
-			LCD_WriteData('*');
-			break;
-			case '0':
-			LCD_Cursor(1);
-			LCD_WriteData('0');
-			break;
-			case '#':
-			LCD_Cursor(1);
-			LCD_WriteData('#');
-			break;
-			default :
-				break ; // Should never occur. Middle LED
-		}
-		break;
-		default:
-			break;
-	}
-	
-	return state;
-}
-*/
 
