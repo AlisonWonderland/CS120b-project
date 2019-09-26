@@ -20,8 +20,10 @@
 
 #include "timer.h"
 
-//add states for display and add more levels  3 max
+// character representation array should be made global for cleaner code
 
+//better name would be displaySequence1()
+// test1 arrays should be renamed to characters
 void displayMatrix1()
 {
 	unsigned char test1[14][8]= {
